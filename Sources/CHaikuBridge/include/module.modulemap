@@ -1,0 +1,5 @@
+module CHaikuBridge {
+    header "CHaikuBridge.h"
+    requires cplusplus
+    export *
+}
