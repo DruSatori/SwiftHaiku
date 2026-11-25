@@ -1,15 +1,18 @@
 #!/bin/sh
 # Cross-build (build-cross.sh), copy the programs to the VM's /boot/home/SwiftHaiku-demo, start
-# Gallery in the VM's desktop and drive each control through `hey` scripting, reading back the
-# text bound to its state after each change: the check box and the slider get key downs
-# (" " and B_RIGHT_ARROW), a radio button a " ", the secure field typed keys, and the pop-up
-# menu an execute of its item. Then it checks that the slider change kept the same native views
-# (same messengers, see run-vm.sh), and that ticking "Show details" adds the details section with
-# new native views (a rebuild). Screenshots land in .build/screens/gallery-{before,after,details}.png.
-# Leaves nothing on the VM.
+# Gallery in the VM's desktop and drive each control through `hey` scripting, checking after each
+# change that some text bound to its state reads as expected:
+#   Basics tab: the check box and slider get key downs (" " and B_RIGHT_ARROW), a radio button a
+#   " ", the secure field typed keys, the pop-up menu an execute of its item.
+#   More tab (picked with B_RIGHT_ARROW and " " to the tab view): the editor gets typed keys, the
+#   list a scripted selection, the color control a new red value and B_ENTER in its red field.
+# It checks that value changes keep the same native views (same messengers, see run-vm.sh) and
+# that ticking "Show details" adds the details section with new native views (a rebuild), then
+# scrolls the ScrollView with a mouse wheel message. Screenshots land in
+# .build/screens/gallery-{before,after,details,more}.png. Leaves nothing on the VM.
 # Usage: VM=<name> run-gallery-vm.sh (the VM's desktop must be running). Exits 0 if every hey
-# command succeeded, Gallery quit, every bound text and view check matched and the screenshots came
-# back; look at the PNGs.
+# command succeeded, Gallery quit, every bound text and view check matched and the screenshots
+# came back; look at the PNGs.
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
 rs=$(cd "${RENKUOS_SWIFT:-$here/../RenkuOS-Swift}" && pwd)
@@ -17,8 +20,7 @@ ssh=$(cd "$rs/../RenkuOS-on-Parallels/build-vm" && pwd)/ssh.sh
 remote=/boot/home/SwiftHaiku-demo
 sig=application/x-vnd.swifthaiku-galleryapp
 screens=$here/.build/screens
-# Gallery's control view names; its texts are named text<n>, n counting every leaf view.
-toggle=toggle3 menu=picker4 radio=picker5 slider=slider6 secure=field2 details=toggle7
+W="of Window 0"
 
 "$here/scripts/build-cross.sh"
 mkdir -p "$screens"
@@ -29,55 +31,78 @@ SCP=1 "$ssh" -q -r "$here/.build/haiku-arm64/app" "vm:$remote"
 fail=0
 shot() { "$ssh" "screenshot -s $remote/gallery-$1.png; test -s $remote/gallery-$1.png" || fail=1; }
 hey() { "$ssh" "hey -s $sig $*" || { echo "hey failed: $*"; fail=1; }; }
-# expect <text view number> <text>: the bound text must read <text>.
+key() { hey "let $1 $W do _KYD with bytes=$2"; }
+# texts: the window's texts (named text<n>, n counting every leaf view), as "<n> <text>" lines.
+texts() { "$ssh" "sleep 0.5; for i in \$(seq 0 70); do echo \$i \$(hey -o $sig get Text of View text\$i $W); done"; }
+# expect <text>: one of the window's texts must read exactly <text>.
 expect() {
-	got=$("$ssh" "sleep 0.5; hey -o $sig get Text of View text$1 of Window 0")
-	echo "text$1: $got"
-	[ "$got" = "$2" ] || { echo "  expected: $2"; fail=1; }
+	if texts | cut -d' ' -f2- | grep -Fqx "$1"; then echo "ok: $1"; else echo "missing text: $1"; fail=1; fi
 }
-# The first 12 bytes of a flattened BMessenger are its port, handler token and team.
+# ids <view name>...: the first 12 bytes (port, handler token, team) of each view's messenger.
 ids() {
-	for v in "View $slider of Window 0" "View text15 of Window 0"; do
-		"$ssh" "hey $sig get Messenger of $v" | grep '"result"' | cut -d: -f2 | cut -d, -f1-12
+	for v in "$@"; do
+		"$ssh" "hey $sig get Messenger of View $v $W" | grep '"result"' | cut -d: -f2 | cut -d, -f1-12
 	done
+}
+# same <file> <file> <what>: both id lists must be complete and equal.
+same() {
+	[ "$(wc -l < "$1")" -eq "$3" ] && cmp -s "$1" "$2" || { echo "$4 rebuilt the views"; fail=1; }
 }
 
 "$ssh" "cd $remote && (./Gallery > stdout 2> stderr &) && sleep 3" || fail=1
 shot before
-hey "let View $toggle of Window 0 do _KYD with 'bytes= '"
-expect 7 "Enabled: yes"
-hey "do MenuItem 2 of Menu 0 of View 0 of View $menu of Window 0"
-expect 9 "Size: Large"
+# Gallery's control names (action ids in render order): tabs0 button1 field2 field3 toggle4
+# picker5 picker6 slider7 toggle8, and on the More tab field9 list10 color11.
+key "View toggle4" "' '"
+expect "Enabled: yes"
+hey "do MenuItem 2 of Menu 0 of View 0 of View picker5 $W"
+expect "Size: Large"
 # View 0 of the radio picker is its title.
-hey "let View 2 of View $radio of Window 0 do _KYD with 'bytes= '"
-expect 11 "Flavor: Chocolate"
-for c in s e c; do hey "let View _input_ of View $secure of Window 0 do _KYD with bytes=$c"; done
-expect 5 "Password: 3 characters"
-ids > "$screens/gallery-views-before.txt"
-hey "let View $slider of Window 0 do _KYD with bytes=\$(printf '\\035')"
-expect 15 51
-ids > "$screens/gallery-views-after.txt"
-[ "$(wc -l < "$screens/gallery-views-before.txt")" -eq 2 ] \
-	&& cmp -s "$screens/gallery-views-before.txt" "$screens/gallery-views-after.txt" \
-	|| { echo "the slider change rebuilt the views"; fail=1; }
+key "View 2 of View picker6" "' '"
+expect "Flavor: Chocolate"
+for c in s e c; do key "View _input_ of View field3" $c; done
+expect "Password: 3 characters"
+ids slider7 field2 > "$screens/gallery-ids-1.txt"
+key "View slider7" "\$(printf '\\035')"
+expect 51
+ids slider7 field2 > "$screens/gallery-ids-2.txt"
+same "$screens/gallery-ids-1.txt" "$screens/gallery-ids-2.txt" 2 "the slider change"
 shot after
-hey "let View $details of Window 0 do _KYD with 'bytes= '"
-ids > "$screens/gallery-views-details.txt"
-! cmp -s "$screens/gallery-views-after.txt" "$screens/gallery-views-details.txt" \
+key "View toggle8" "' '"
+expect "Added and removed by a rebuild."
+ids slider7 field2 > "$screens/gallery-ids-3.txt"
+! cmp -s "$screens/gallery-ids-2.txt" "$screens/gallery-ids-3.txt" \
 	|| { echo "showing the details did not rebuild the views"; fail=1; }
-expect 19 "This section is added and removed by a rebuild."
-expect 15 51
-got=$("$ssh" "hey -o $sig get Value of View $secure of Window 0")
+expect 51
+got=$("$ssh" "hey -o $sig get Value of View field3 $W")
 [ "$got" = sec ] || { echo "the rebuilt secure field reads '$got', not sec"; fail=1; }
 shot details
+key "View tabs0" "\$(printf '\\035')"
+key "View tabs0" "' '"
+expect "Tab: 2"
+ids field9 list10 color11 > "$screens/gallery-ids-4.txt"
+for c in a b c; do key "View field9" $c; done
+expect "Notes: 3 characters"
+hey "set Selection 2 of View list10 $W to true"
+expect "Selected: Cherry"
+# A quoted value is sent as a string, which a text control's Value takes.
+hey "set Value of View _red of View color11 $W to '\"200\"'"
+key "View _input_ of View _red of View color11" "\$'\\n'"
+expect "Color: 200, 102, 153"
+ids field9 list10 color11 > "$screens/gallery-ids-5.txt"
+same "$screens/gallery-ids-4.txt" "$screens/gallery-ids-5.txt" 3 "editing, selecting or picking a color"
+# Sent to the first row, the wheel message goes up the views to the one the scroll bar scrolls.
+row=$(texts | grep -x '[0-9]* Row 1' | cut -d' ' -f1)
+hey "let View text$row $W do _MWC with 'be:wheel_delta_y=float(3)'"
+shot more
 SCP=1 "$ssh" -q "vm:$remote/gallery-before.png" "vm:$remote/gallery-after.png" \
-	"vm:$remote/gallery-details.png" "$screens/" || fail=1
+	"vm:$remote/gallery-details.png" "vm:$remote/gallery-more.png" "$screens/" || fail=1
 # The app can be gone before hey gets the reply, so only the ps check below counts.
 "$ssh" "hey -s $sig quit" || true
 sleep 1
 # Haiku's ps prints whole command lines, so anchor the match to skip grep itself.
 "$ssh" "echo '[stdout]'; cat $remote/stdout; echo '[stderr]'; cat $remote/stderr; ! ps | grep -q '^\./Gallery' || { echo still running; kill Gallery; exit 1; }" || fail=1
 "$ssh" "rm -rf $remote"
-echo "== screenshots: $screens/gallery-before.png $screens/gallery-after.png $screens/gallery-details.png"
+echo "== screenshots: $screens/gallery-{before,after,details,more}.png"
 if [ "$fail" -eq 0 ]; then echo "== RESULT: PASS"; else echo "== RESULT: FAIL"; fi
 exit "$fail"

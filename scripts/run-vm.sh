@@ -22,8 +22,8 @@ sig=application/x-vnd.swifthaiku-counterapp
 screens=$here/.build/screens
 
 "$here/scripts/build-cross.sh"
-rm -rf "$screens"
 mkdir -p "$screens"
+rm -f "$screens"/before.png "$screens"/after.png "$screens"/field.txt "$screens"/views-*.txt
 echo "== run on $(PRINT_IP=1 "$ssh")"
 "$ssh" "rm -rf $remote"
 SCP=1 "$ssh" -q -r "$here/.build/haiku-arm64/app" "vm:$remote"

@@ -281,3 +281,136 @@ extension View {
         FramedView(width: width, height: height, content: self)
     }
 }
+
+/// A multi-line editable text (a BTextView in a vertically scrolling BScrollView); give it a
+/// height with `.frame`.
+public struct TextEditor: View, PrimitiveView {
+    let text: Binding<String>
+
+    /// - Parameter text: The text; every edit writes it and refreshes the window's content.
+    public init(text: Binding<String>) { self.text = text }
+
+    func render(into renderer: Renderer) {
+        let id = renderer.addAction { new, _ in text.wrappedValue = new }
+        renderer.commands.append(.textEditor(text: text.wrappedValue, id: id))
+    }
+}
+
+/// A vertically scrolling list of lines of text, of which one can be selected (a BListView in a
+/// BScrollView); give it a height with `.frame`.
+///
+/// shortcut: the items are strings and the selection an index, not SwiftUI's identifiable data
+/// and row views; a change of items rebuilds the window's content. Add data-driven rows once
+/// lists need more than text.
+public struct List: View, PrimitiveView {
+    let items: [String]
+    let selection: Binding<Int?>
+
+    /// - Parameters:
+    ///   - items: The lines, which must not contain newlines.
+    ///   - selection: The index of the selected line; `nil` for none.
+    public init(_ items: [String], selection: Binding<Int?>) {
+        self.items = items
+        self.selection = selection
+    }
+
+    func render(into renderer: Renderer) {
+        let id = renderer.addAction { _, value in selection.wrappedValue = value < 0 ? nil : value }
+        renderer.commands.append(.list(items: items, selection: selection.wrappedValue ?? -1, id: id))
+    }
+}
+
+/// Scrolls its content, which it lays out top to bottom, vertically (a BScrollView); give it a
+/// height with `.frame`, or it grows to fit its content.
+public struct ScrollView<Content: View>: View, PrimitiveView {
+    let content: Content
+
+    public init(@ViewBuilder content: () -> Content) { self.content = content() }
+
+    func render(into renderer: Renderer) {
+        renderer.commands.append(.beginScroll)
+        renderer.render(content)
+        renderer.commands.append(.endStack)
+    }
+}
+
+/// Shows one of its children at a time, picked with tabs (a BTabView). Give every child a
+/// `.tabItem(_:)`, whose title labels its tab.
+public struct TabView<Content: View>: View, PrimitiveView {
+    let selection: Binding<Int>?
+    let content: Content
+
+    /// - Parameter selection: The index of the shown tab; `nil` to leave it to the user, in
+    ///   which case a rebuild of the window's content shows the first tab again.
+    public init(selection: Binding<Int>? = nil, @ViewBuilder content: () -> Content) {
+        self.selection = selection
+        self.content = content()
+    }
+
+    func render(into renderer: Renderer) {
+        let id = selection.map { selection in renderer.addAction { _, value in selection.wrappedValue = value } }
+        renderer.commands.append(.beginTabs(selection: selection?.wrappedValue ?? -1, id: id ?? -1))
+        renderer.render(content)
+        renderer.commands.append(.endTabs)
+    }
+}
+
+/// A view shown as one tab of a `TabView`; see `View.tabItem(_:)`.
+public struct TabItem<Content: View>: View, PrimitiveView {
+    let title: String
+    let content: Content
+
+    func render(into renderer: Renderer) {
+        renderer.commands.append(.beginTab(title))
+        renderer.render(content)
+        renderer.commands.append(.endStack)
+    }
+}
+
+extension View {
+    /// Makes the view a tab of the enclosing `TabView`, laid out top to bottom.
+    /// - Parameter title: The tab's label.
+    public func tabItem(_ title: String) -> TabItem<Self> { TabItem(title: title, content: self) }
+}
+
+/// An opaque RGB color, as picked by a `ColorPicker`.
+public struct Color: Equatable {
+    public var red: UInt8
+    public var green: UInt8
+    public var blue: UInt8
+
+    public init(red: UInt8, green: UInt8, blue: UInt8) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    /// The color as 0xRRGGBB00 in an Int32's bit pattern, as BColorControl holds it.
+    var packed: Int {
+        Int(Int32(bitPattern: UInt32(red) << 24 | UInt32(green) << 16 | UInt32(blue) << 8))
+    }
+
+    init(packed: Int) {
+        let value = UInt32(bitPattern: Int32(truncatingIfNeeded: packed))
+        self.init(red: UInt8(value >> 24 & 0xFF), green: UInt8(value >> 16 & 0xFF), blue: UInt8(value >> 8 & 0xFF))
+    }
+}
+
+/// A color chooser (a BColorControl: a palette and red, green and blue fields).
+public struct ColorPicker: View, PrimitiveView {
+    let title: String
+    let selection: Binding<Color>
+
+    /// - Parameters:
+    ///   - title: Shown above the control; may be empty.
+    ///   - selection: The color; every change writes it and refreshes the window's content.
+    public init(_ title: String, selection: Binding<Color>) {
+        self.title = title
+        self.selection = selection
+    }
+
+    func render(into renderer: Renderer) {
+        let id = renderer.addAction { _, value in selection.wrappedValue = Color(packed: value) }
+        renderer.commands.append(.colorPicker(title, rgb: selection.wrappedValue.packed, id: id))
+    }
+}
