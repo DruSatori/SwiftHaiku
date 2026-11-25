@@ -14,8 +14,9 @@ class BGroupView;
 /// Receives a window's control events on the window thread, with the window locked.
 /// @param context The pointer given to SHWindow::create.
 /// @param id The id the control was added with.
-/// @param text The text field's new text, or NULL for a button press. Valid only during the call.
-typedef void (*SHEventHandler)(void *context, int32_t id, const char *text);
+/// @param text The text field's new text, or NULL for other controls. Valid only during the call.
+/// @param value The new value of a check box (0 or 1), picker (option index) or slider; else 0.
+typedef void (*SHEventHandler)(void *context, int32_t id, const char *text, int32_t value);
 
 /// The application object; create it before any window.
 class SWIFT_IMMORTAL_REFERENCE SHApp : public BApplication {
@@ -52,16 +53,37 @@ public:
 	/// text. Does nothing if it already has that text, so a field's caret and selection stay.
 	/// @param index The view's position among the leaf views added since beginContent().
 	void setViewText(int32_t index, const char *text);
+	/// Sets the value of a leaf view in place, as in the matching add call: a check box's state,
+	/// a picker's selection, a slider's value or a progress bar's thousandths. Does nothing if it
+	/// already has that value. @param index As for setViewText().
+	void setViewValue(int32_t index, int32_t value);
 	/// Starts a nested BGroupView. @param spacing Points between items; negative for the default.
 	void beginStack(bool vertical, float spacing);
+	/// Ends the innermost stack or group box.
 	void endStack();
+	/// Starts a BBox with a title around a nested vertical BGroupView; end it with endStack().
+	void beginBox(const char *title);
 	/// Sets the insets of the current group. @param insets Points; negative for the default.
 	void setInsets(float insets);
 	void addText(const char *text);
 	/// Adds a BButton named "button<id>".
 	void addButton(const char *title, int32_t id);
 	/// Adds a BTextControl named "field<id>". @param label Shown left of the field; may be empty.
-	void addTextField(const char *label, const char *text, int32_t id);
+	/// @param secure Hides the typed text.
+	void addTextField(const char *label, const char *text, bool secure, int32_t id);
+	/// Adds a BCheckBox named "toggle<id>".
+	void addToggle(const char *title, bool on, int32_t id);
+	/// Adds a picker named "picker<id>": a BMenuField with a pop-up menu, or a vertical
+	/// BGroupView with the title (if any) and one BRadioButton per option.
+	/// @param options The option titles, separated by newlines.
+	void addPicker(const char *title, const char *options, int32_t selection, bool radio,
+		int32_t id);
+	/// Adds a horizontal BSlider named "slider<id>" with values from 0 to steps.
+	void addSlider(int32_t value, int32_t steps, int32_t id);
+	/// Adds a BStatusBar. @param value Progress in thousandths.
+	void addProgress(const char *title, int32_t value);
+	/// Adds a BSeparatorView across the current group: a horizontal line in a vertical group.
+	void addDivider();
 	/// Adds glue that takes up the free space in the current group.
 	void addSpacer();
 	/// Fixes the size of the item added last. @param width, height Points; negative leaves it free.
@@ -70,6 +92,7 @@ public:
 private:
 	SHWindow(const char *title, SHEventHandler handler, void *context);
 	void MessageReceived(BMessage *message) override;
+	void addLeaf(BView *view);
 
 	SHEventHandler fHandler;
 	void *fContext;

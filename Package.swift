@@ -11,11 +11,13 @@ let package = Package(
     products: [
         .library(name: "SwiftHaiku", targets: ["SwiftHaiku"]),
         .executable(name: "Counter", targets: ["Counter"]),
+        .executable(name: "Gallery", targets: ["Gallery"]),
     ],
     targets: [
         .target(name: "CHaikuBridge", linkerSettings: [.linkedLibrary("be")]),
         .target(name: "SwiftHaiku", dependencies: ["CHaikuBridge"], swiftSettings: cxx),
         .executableTarget(name: "Counter", dependencies: ["SwiftHaiku"], swiftSettings: cxx),
+        .executableTarget(name: "Gallery", dependencies: ["SwiftHaiku"], swiftSettings: cxx),
         // An executable, not a test target: RenkuOS has neither XCTest nor Swift Testing.
         .executableTarget(name: "SwiftHaikuChecks", dependencies: ["SwiftHaiku"],
                           path: "Tests/SwiftHaikuChecks", swiftSettings: cxx),

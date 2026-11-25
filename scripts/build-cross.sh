@@ -1,6 +1,6 @@
 #!/bin/sh
-# Cross-build SwiftHaiku, the Counter example and the SwiftHaikuChecks program for RenkuOS arm64
-# on this Mac, with RenkuOS-Swift's scripts/swiftc-haiku.sh and Xcode's clang++, into
+# Cross-build SwiftHaiku, the Counter and Gallery examples and the SwiftHaikuChecks program for
+# RenkuOS arm64 on this Mac, with RenkuOS-Swift's scripts/swiftc-haiku.sh and Xcode's clang++, into
 # .build/haiku-arm64/app (with the Swift runtime libraries in app/lib, where the programs look).
 # Usage: build-cross.sh. Needs RenkuOS-Swift (RENKUOS_SWIFT, default ../RenkuOS-Swift) with its
 # SDK built (scripts/build-stdlib-haiku.sh).
@@ -32,6 +32,8 @@ swiftc -parse-as-library -enable-testing -module-name SwiftHaiku -wmo -emit-modu
 	-o "$out/SwiftHaiku.o"
 swiftc -parse-as-library -I "$out" "$here/Sources/Counter/Counter.swift" \
 	"$out/SwiftHaiku.o" "$out/Bridge.o" -lbe -o "$out/app/Counter"
+swiftc -parse-as-library -I "$out" "$here/Sources/Gallery/Gallery.swift" \
+	"$out/SwiftHaiku.o" "$out/Bridge.o" -lbe -o "$out/app/Gallery"
 swiftc -I "$out" "$here/Tests/SwiftHaikuChecks/main.swift" \
 	"$out/SwiftHaiku.o" "$out/Bridge.o" -lbe -o "$out/app/SwiftHaikuChecks"
 cp "$sdk"/lib/swift/haiku/*.so "$out/app/lib/"
