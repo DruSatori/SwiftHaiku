@@ -59,10 +59,11 @@ final class WindowHost {
     private let root: any View
     private var window: SHWindow?
     private var actions: [(String) -> Void] = []
+    private var commands: [LayoutCommand] = [] // what the native content was last made from
 
     init(title: String, root: any View) {
         self.root = root
-        // Called on the window thread with the window locked, which is where rebuilds must run.
+        // Called on the window thread with the window locked, which is where refreshes must run.
         let handler: SHEventHandler = { context, id, text in
             guard let context else { return }
             let host = Unmanaged<WindowHost>.fromOpaque(context).takeUnretainedValue()
@@ -72,25 +73,31 @@ final class WindowHost {
             fatalError("cannot create the window")
         }
         self.window = window
-        rebuild()
+        refresh()
         window.show()
     }
 
     private func handle(id: Int, text: String) {
         guard actions.indices.contains(id) else { return }
         actions[id](text)
-        rebuild()
+        refresh()
     }
 
-    // shortcut: rebuilds the whole native content after every event, with no diffing, so state
-    // changed outside a control's action (a timer, another thread) does not show, and view state
-    // other than the text field focus and selection (restored by field id) is lost; diff the
-    // command lists and update in place once windows get big or need updates from elsewhere.
-    private func rebuild() {
+    // shortcut: re-renders after every control event only, so state changed elsewhere (a timer,
+    // another thread) does not show; a change of structure (an `if` adding a view, a new label,
+    // size or id) still rebuilds the whole native content, drawn once so it does not flash but
+    // losing view state other than text field focus and selection; diff per subtree once
+    // windows get big or structure changes often.
+    private func refresh() {
         guard let window else { return }
         let renderer = Renderer()
         renderer.render(root)
         actions = renderer.actions
+        defer { commands = renderer.commands }
+        if LayoutCommand.sameStructure(commands, renderer.commands) {
+            update(window, renderer.commands)
+            return
+        }
         window.beginContent()
         for command in renderer.commands {
             switch command {
@@ -105,5 +112,18 @@ final class WindowHost {
             }
         }
         window.endContent()
+    }
+
+    /// Updates the content of the native views made from a list with the same structure.
+    private func update(_ window: SHWindow, _ commands: [LayoutCommand]) {
+        var index: Int32 = 0 // position among the leaf views, as SHWindow::setViewText counts
+        for command in commands {
+            switch command {
+            case .text(let text), .button(let text, _), .textField(_, let text, _):
+                window.setViewText(index, text)
+            case .beginStack, .endStack, .insets, .spacer, .size: continue // no leaf view
+            }
+            index += 1
+        }
     }
 }

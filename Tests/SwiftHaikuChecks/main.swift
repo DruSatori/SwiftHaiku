@@ -45,4 +45,23 @@ renderer = Renderer()
 renderer.render(extra)
 check(renderer.commands.contains(.spacer) && renderer.commands.contains(.text("positive")),
       "re-rendering picks up the other branches")
+
+func commands(_ view: some View) -> [LayoutCommand] {
+    let renderer = Renderer()
+    renderer.render(view)
+    return renderer.commands
+}
+let before = commands(sample)
+sample.count = 5
+sample.name = "Cy"
+check(LayoutCommand.sameStructure(before, commands(sample)),
+      "new text and field text keep the structure, so the views are updated in place")
+check(!LayoutCommand.sameStructure(before, commands(extra)), "an added view changes the structure")
+check(!LayoutCommand.sameStructure(commands(VStack { Text("a") }), commands(HStack { Text("a") })),
+      "another stack kind changes the structure")
+check(!LayoutCommand.sameStructure(commands(Text("a").frame(width: 1)), commands(Text("a").frame(width: 2))),
+      "another size changes the structure")
+check(!LayoutCommand.sameStructure(commands(Text("a")), commands(Button("a") {})),
+      "another control kind changes the structure")
+check(!LayoutCommand.sameStructure([], before), "the first render builds the content")
 print("PASS")

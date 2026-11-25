@@ -39,7 +39,7 @@ struct CounterView: View {
 
 ## How it works
 
-Swift cannot import or subclass `BApplication` or `BWindow` directly, so a thin C++ bridge (the `CHaikuBridge` target: `SHApp` and `SHWindow`, both marked `SWIFT_IMMORTAL_REFERENCE`) owns the native objects and builds native views with `BGroupLayout`. All logic lives in Swift: a renderer walks the view tree and turns it into a list of layout commands (begin/end stack, insets, text, button, text field, spacer, size), and after every button press or text edit the window's content is rebuilt from those commands. The text field that had keyboard focus gets its focus and selection back after each rebuild, so typing keeps working.
+Swift cannot import or subclass `BApplication` or `BWindow` directly, so a thin C++ bridge (the `CHaikuBridge` target: `SHApp` and `SHWindow`, both marked `SWIFT_IMMORTAL_REFERENCE`) owns the native objects and builds native views with `BGroupLayout`. All logic lives in Swift: a renderer walks the view tree and turns it into a list of layout commands (begin/end stack, insets, text, button, text field, spacer, size), and after every button press or text edit the view tree is rendered again. If the new commands have the same structure as the last ones (the same stacks, controls, ids, labels, sizes and insets), only the changed texts, button titles and field texts are set on the existing native views; otherwise the window's content is rebuilt from the commands, with drawing held off until it is done so it does not flash. The text field that had keyboard focus gets its focus and selection back after a rebuild, so typing keeps working.
 
 ## Building
 
@@ -53,11 +53,11 @@ On RenkuOS itself there is no SwiftPM in the 6.4.3 toolchain yet, so build with 
 
 `Tests/SwiftHaikuChecks` is an executable rather than a test target, because RenkuOS has neither XCTest nor Swift Testing. It checks the GUI-free part (view building, state and bindings, rendering to layout commands) and opens no window.
 
-`scripts/run-vm.sh` (run as `VM=<name> scripts/run-vm.sh`) cross-builds, copies the programs to a RenkuOS VM with a running desktop, runs the checks, starts Counter, drives its button and text field through `hey` scripting, and saves before and after screenshots to `.build/screens/`. It exits 0 on success; look at the screenshots too. It reaches the VM through `ssh.sh` from the RenkuOS-on-Parallels project (also not public yet), found next to RenkuOS-Swift.
+`scripts/run-vm.sh` (run as `VM=<name> scripts/run-vm.sh`) cross-builds, copies the programs to a RenkuOS VM with a running desktop, runs the checks, starts Counter, drives its button and text field through `hey` scripting, checks that the button presses kept the same native views (updated in place, not rebuilt), and saves before and after screenshots to `.build/screens/`. It exits 0 on success; look at the screenshots too. It reaches the VM through `ssh.sh` from the RenkuOS-on-Parallels project (also not public yet), found next to RenkuOS-Swift.
 
 ## Limitations
 
-- The whole native window content is rebuilt after every event, with no diffing. State changed outside a control's action (a timer, another thread) does not show, and view state other than text field focus and selection is lost.
+- Any change of structure (an `if` adding or removing a view, a new label, size or id) rebuilds the whole native window content, losing view state other than text field focus and selection. State changed outside a control's action (a timer, another thread) does not show.
 - `@State` only survives in a `WindowGroup`'s root view; views made inside a `body` are made anew with their initial state.
 - Control ids are assigned in render order, so an `if` that adds or removes controls before a text field can move focus.
 - A `TextField` placeholder is shown as the field's label, because `BTextControl` has no placeholder.

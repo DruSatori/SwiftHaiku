@@ -29,8 +29,9 @@ private:
 	SHApp(const char *signature) : BApplication(signature) {}
 };
 
-/// A titled window whose content is rebuilt from a stream of layout calls: beginContent(), then
-/// stack, leaf and modifier calls, then endContent(). Closing it quits the app.
+/// A titled window whose content is built from a stream of layout calls: beginContent(), then
+/// stack, leaf and modifier calls, then endContent(). Content that keeps its structure is updated
+/// in place with setViewText() instead. Closing it quits the app.
 class SWIFT_IMMORTAL_REFERENCE SHWindow : public BWindow {
 public:
 	/// @param handler Called for every button press and text edit.
@@ -41,11 +42,16 @@ public:
 	}
 	void show() { Show(); }
 
-	/// Deletes the current content and starts a new top-level vertical group.
+	/// Deletes the current content and starts a new top-level vertical group. Drawing is held
+	/// off until endContent(), so the rebuild does not flash.
 	void beginContent();
 	/// Finishes the content; puts the keyboard focus and selection back into the text field
-	/// that had them, found by id.
+	/// that had them, found by id, and draws the new content.
 	void endContent();
+	/// Sets the text of a leaf view in place: a text's text, a button's title or a text field's
+	/// text. Does nothing if it already has that text, so a field's caret and selection stay.
+	/// @param index The view's position among the leaf views added since beginContent().
+	void setViewText(int32_t index, const char *text);
 	/// Starts a nested BGroupView. @param spacing Points between items; negative for the default.
 	void beginStack(bool vertical, float spacing);
 	void endStack();
@@ -69,6 +75,7 @@ private:
 	void *fContext;
 	BGroupView *fContent = nullptr;
 	std::vector<BGroupView *> fStack;
+	std::vector<BView *> fViews; // the leaf views, in the order they were added
 	BString fFocusName;
 	int32 fSelectionStart = 0;
 	int32 fSelectionEnd = 0;

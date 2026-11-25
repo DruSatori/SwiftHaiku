@@ -7,6 +7,8 @@
 #include <StringView.h>
 #include <TextControl.h>
 
+#include <string.h>
+
 static const uint32 kButtonPressed = 'shBt';
 static const uint32 kTextModified = 'shTx';
 
@@ -29,6 +31,7 @@ SHWindow::SHWindow(const char *title, SHEventHandler handler, void *context)
 void
 SHWindow::beginContent()
 {
+	DisableUpdates();
 	fFocusName = "";
 	BView *focus = CurrentFocus();
 	if (focus != NULL && dynamic_cast<BTextControl *>(focus->Parent()) != NULL) {
@@ -42,6 +45,7 @@ SHWindow::beginContent()
 	fContent = new BGroupView(B_VERTICAL, 0);
 	AddChild(fContent);
 	fStack.assign(1, fContent);
+	fViews.clear();
 }
 
 
@@ -49,11 +53,32 @@ void
 SHWindow::endContent()
 {
 	fStack.clear();
-	if (fFocusName.IsEmpty())
-		return;
-	if (BTextControl *field = dynamic_cast<BTextControl *>(FindView(fFocusName))) {
+	BTextControl *field = fFocusName.IsEmpty() ? NULL
+		: dynamic_cast<BTextControl *>(FindView(fFocusName));
+	if (field != NULL) {
 		field->MakeFocus(true);
 		field->TextView()->Select(fSelectionStart, fSelectionEnd);
+	}
+	EnableUpdates();
+}
+
+
+void
+SHWindow::setViewText(int32_t index, const char *text)
+{
+	if (index < 0 || (size_t)index >= fViews.size())
+		return;
+	BView *view = fViews[index];
+	// BTextControl is a BControl too, so it must be tried first.
+	if (BTextControl *field = dynamic_cast<BTextControl *>(view)) {
+		if (strcmp(field->Text(), text) != 0)
+			field->SetText(text);
+	} else if (BControl *control = dynamic_cast<BControl *>(view)) {
+		if (strcmp(control->Label() ? control->Label() : "", text) != 0)
+			control->SetLabel(text);
+	} else if (BStringView *string = dynamic_cast<BStringView *>(view)) {
+		if (strcmp(string->Text() ? string->Text() : "", text) != 0)
+			string->SetText(text);
 	}
 }
 
@@ -85,7 +110,9 @@ SHWindow::setInsets(float insets)
 void
 SHWindow::addText(const char *text)
 {
-	fStack.back()->GroupLayout()->AddView(new BStringView(NULL, text));
+	BStringView *view = new BStringView(NULL, text);
+	fStack.back()->GroupLayout()->AddView(view);
+	fViews.push_back(view);
 }
 
 
@@ -96,7 +123,9 @@ SHWindow::addButton(const char *title, int32_t id)
 	message->AddInt32("id", id);
 	BString name;
 	name.SetToFormat("button%" B_PRId32, id);
-	fStack.back()->GroupLayout()->AddView(new BButton(name, title, message));
+	BButton *button = new BButton(name, title, message);
+	fStack.back()->GroupLayout()->AddView(button);
+	fViews.push_back(button);
 }
 
 
@@ -111,6 +140,7 @@ SHWindow::addTextField(const char *label, const char *text, int32_t id)
 	message->AddInt32("id", id);
 	field->SetModificationMessage(message);
 	fStack.back()->GroupLayout()->AddView(field);
+	fViews.push_back(field);
 }
 
 

@@ -15,7 +15,7 @@ public struct Button: View, PrimitiveView {
 
     /// - Parameters:
     ///   - title: The button's label.
-    ///   - action: Run when the button is pressed; the window's content is rebuilt afterwards.
+    ///   - action: Run when the button is pressed; the window's content is refreshed afterwards.
     public init(_ title: String, action: @escaping () -> Void) {
         self.title = title
         self.action = action
@@ -34,7 +34,7 @@ public struct TextField: View, PrimitiveView {
     /// - Parameters:
     ///   - placeholder: Shown as the field's label, to its left, since BTextControl has no
     ///     placeholder text.
-    ///   - text: The field's text; every edit writes it and rebuilds the window's content.
+    ///   - text: The field's text; every edit writes it and refreshes the window's content.
     public init(_ placeholder: String, text: Binding<String>) {
         self.placeholder = placeholder
         self.text = text

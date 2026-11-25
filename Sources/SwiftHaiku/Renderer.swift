@@ -8,6 +8,23 @@ enum LayoutCommand: Equatable {
     case textField(String, text: String, id: Int)
     case spacer
     case size(width: Float?, height: Float?)
+
+    /// This command with its content (a text's text, a button's title, a text field's text)
+    /// blanked out, leaving what decides which native views it makes and how they are laid out.
+    var structure: LayoutCommand {
+        switch self {
+        case .text: .text("")
+        case .button(_, let id): .button("", id: id)
+        case .textField(let label, _, let id): .textField(label, text: "", id: id)
+        case .beginStack, .endStack, .insets, .spacer, .size: self
+        }
+    }
+
+    /// Whether two command lists make the same native views, so that going from one to the
+    /// other only needs the views' content updated in place rather than a rebuild.
+    static func sameStructure(_ old: [LayoutCommand], _ new: [LayoutCommand]) -> Bool {
+        old.map(\.structure) == new.map(\.structure)
+    }
 }
 
 /// Turns a view tree into layout commands, and collects the actions of its controls; a control's
