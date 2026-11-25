@@ -53,7 +53,7 @@ On RenkuOS itself there is no SwiftPM in the 6.4.3 toolchain yet, so build with 
 
 `Tests/SwiftHaikuChecks` is an executable rather than a test target, because RenkuOS has neither XCTest nor Swift Testing. It checks the GUI-free part (view building, state and bindings, rendering to layout commands) and opens no window.
 
-`scripts/run-vm.sh` (run as `VM=<name> scripts/run-vm.sh`) cross-builds, copies the programs to a RenkuOS VM with a running desktop, runs the checks, starts Counter, drives its button and text field through `hey` scripting, and saves before and after screenshots to `.build/screens/`. It exits 0 on success; look at the screenshots too.
+`scripts/run-vm.sh` (run as `VM=<name> scripts/run-vm.sh`) cross-builds, copies the programs to a RenkuOS VM with a running desktop, runs the checks, starts Counter, drives its button and text field through `hey` scripting, and saves before and after screenshots to `.build/screens/`. It exits 0 on success; look at the screenshots too. It reaches the VM through `ssh.sh` from the RenkuOS-on-Parallels project (also not public yet), found next to RenkuOS-Swift.
 
 ## Limitations
 
