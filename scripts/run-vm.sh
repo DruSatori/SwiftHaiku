@@ -7,9 +7,12 @@
 # The button is pressed with a B_KEY_DOWN (" ") sent straight to the BButton's own messenger
 # (`let ... do`), since BView ignores key messages that still carry specifiers; the text field
 # gets a mouse down/up and then key downs the same way, on its inner BTextView "_input_".
+# The count text and the field must stay the same native views across the presses (same port,
+# handler token and team in their messengers), which shows the content was updated in place
+# rather than rebuilt.
 # Usage: VM=<name> run-vm.sh (the VM's desktop must be running). Exits 0 if the checks passed,
-# every hey command and quit succeeded, the field reads "Haiku" and both screenshots came back;
-# look at the PNGs.
+# every hey command and quit succeeded, the views were kept, the field reads "Haiku" and both
+# screenshots came back; look at the PNGs.
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
 rs=$(cd "${RENKUOS_SWIFT:-$here/../RenkuOS-Swift}" && pwd)
@@ -30,11 +33,22 @@ fail=0
 shot() { "$ssh" "screenshot -s $remote/$1.png; test -s $remote/$1.png" || fail=1; }
 "$ssh" "cd $remote && (./Counter > stdout 2> stderr &) && sleep 3" || fail=1
 shot before
+# The first 12 bytes of a flattened BMessenger are its port, handler token and team.
+ids() {
+	for v in "View 0 of View 0 of View 0 of View 0 of Window 0" "View field1 of Window 0"; do
+		"$ssh" "hey $sig get Messenger of $v" | grep '"result"' | cut -d: -f2 | cut -d, -f1-12
+	done
+}
+ids > "$screens/views-before.txt"
 for i in 1 2; do
 	"$ssh" "hey $sig let View button0 of Window 0 do _KYD with 'bytes= '" || fail=1
 done
-# Click into the field, then type one key at a time: each key rebuilds the window, so the text
-# only comes out in order if the focus and caret survive the rebuild.
+ids > "$screens/views-after.txt"
+cat "$screens/views-after.txt"
+[ "$(wc -l < "$screens/views-before.txt")" -eq 2 ] && cmp -s "$screens/views-before.txt" "$screens/views-after.txt" \
+	|| { echo "the views were rebuilt, not updated in place"; fail=1; }
+# Click into the field, then type one key at a time: each key refreshes the window, so the text
+# only comes out in order if the focus and caret survive the refresh.
 field="View _input_ of View field1 of Window 0"
 "$ssh" "hey $sig let $field do _MDN with 'screen_where=BPoint(200,190)' and 'buttons=int32(1)' and 'clicks=int32(1)' && hey $sig let $field do _MUP with 'screen_where=BPoint(200,190)'" || fail=1
 for c in H a i k u; do "$ssh" "hey -s $sig let $field do _KYD with bytes=$c" || fail=1; done

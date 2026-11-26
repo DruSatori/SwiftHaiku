@@ -58,52 +58,86 @@ public struct WindowGroup<Content: View>: Scene, OpenableScene {
 final class WindowHost {
     private let root: any View
     private var window: SHWindow?
-    private var actions: [(String) -> Void] = []
+    private var actions: [Renderer.Action] = []
+    private var commands: [LayoutCommand] = [] // what the native content was last made from
 
     init(title: String, root: any View) {
         self.root = root
-        // Called on the window thread with the window locked, which is where rebuilds must run.
-        let handler: SHEventHandler = { context, id, text in
+        // Called on the window thread with the window locked, which is where refreshes must run.
+        let handler: SHEventHandler = { context, id, text, value in
             guard let context else { return }
             let host = Unmanaged<WindowHost>.fromOpaque(context).takeUnretainedValue()
-            host.handle(id: Int(id), text: text.map { String(cString: $0) } ?? "")
+            host.handle(id: Int(id), text: text.map { String(cString: $0) } ?? "", value: Int(value))
         }
         guard let window = SHWindow.create(title, handler, Unmanaged.passUnretained(self).toOpaque()) else {
             fatalError("cannot create the window")
         }
         self.window = window
-        rebuild()
+        refresh()
         window.show()
     }
 
-    private func handle(id: Int, text: String) {
+    private func handle(id: Int, text: String, value: Int) {
         guard actions.indices.contains(id) else { return }
-        actions[id](text)
-        rebuild()
+        actions[id](text, value)
+        refresh()
     }
 
-    // shortcut: rebuilds the whole native content after every event, with no diffing, so state
-    // changed outside a control's action (a timer, another thread) does not show, and view state
-    // other than the text field focus and selection (restored by field id) is lost; diff the
-    // command lists and update in place once windows get big or need updates from elsewhere.
-    private func rebuild() {
+    // shortcut: re-renders after every control event only, so state changed elsewhere (a timer,
+    // another thread) does not show; a change of structure (an `if` adding a view, a new label,
+    // size or id) still rebuilds the whole native content, drawn once so it does not flash but
+    // losing view state other than text field focus and selection; diff per subtree once
+    // windows get big or structure changes often.
+    private func refresh() {
         guard let window else { return }
         let renderer = Renderer()
         renderer.render(root)
         actions = renderer.actions
+        defer { commands = renderer.commands }
+        if LayoutCommand.sameStructure(commands, renderer.commands) {
+            update(window, renderer.commands)
+            return
+        }
         window.beginContent()
         for command in renderer.commands {
             switch command {
             case .beginStack(let vertical, let spacing): window.beginStack(vertical, spacing ?? -1)
+            case .beginBox(let title): window.beginBox(title)
             case .endStack: window.endStack()
             case .insets(let insets): window.setInsets(insets ?? -1)
             case .text(let text): window.addText(text)
             case .button(let title, let id): window.addButton(title, Int32(id))
-            case .textField(let label, let text, let id): window.addTextField(label, text, Int32(id))
+            case .textField(let label, let text, let secure, let id):
+                window.addTextField(label, text, secure, Int32(id))
+            case .toggle(let title, let isOn, let id): window.addToggle(title, isOn, Int32(id))
+            case .picker(let title, let options, let selection, let radio, let id):
+                window.addPicker(title, options.joined(separator: "\n"), Int32(selection), radio, Int32(id))
+            case .slider(let value, let steps, let id): window.addSlider(Int32(value), Int32(steps), Int32(id))
+            case .progress(let title, let value): window.addProgress(title, Int32(value))
+            case .divider: window.addDivider()
             case .spacer: window.addSpacer()
             case .size(let width, let height): window.setLastSize(width ?? -1, height ?? -1)
             }
         }
         window.endContent()
+    }
+
+    /// Updates the content of the native views made from a list with the same structure.
+    private func update(_ window: SHWindow, _ commands: [LayoutCommand]) {
+        var index: Int32 = 0 // position among the leaf views, as SHWindow::setViewText counts
+        for command in commands {
+            switch command {
+            case .text(let text), .button(let text, _), .textField(_, let text, _, _):
+                window.setViewText(index, text)
+            case .toggle(let title, let isOn, _):
+                window.setViewText(index, title)
+                window.setViewValue(index, isOn ? 1 : 0)
+            case .picker(_, _, let value, _, _), .slider(let value, _, _), .progress(_, let value):
+                window.setViewValue(index, Int32(value))
+            case .divider: break
+            case .beginStack, .beginBox, .endStack, .insets, .spacer, .size: continue // no leaf view
+            }
+            index += 1
+        }
     }
 }

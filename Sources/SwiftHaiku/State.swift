@@ -2,7 +2,7 @@
 /// control that edits it.
 ///
 /// shortcut: the storage lives in the State value itself, so only state in a WindowGroup's root
-/// view survives a rebuild (views made inside a body are made anew, with their initial state);
+/// view survives a re-render (views made inside a body are made anew, with their initial state);
 /// key storage by position in the view tree when nested views need their own state.
 @propertyWrapper
 public struct State<Value> {
