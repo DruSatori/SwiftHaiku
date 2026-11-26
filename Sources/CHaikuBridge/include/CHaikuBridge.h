@@ -10,12 +10,15 @@
 #include <vector>
 
 class BGroupView;
+class BTabView;
 
 /// Receives a window's control events on the window thread, with the window locked.
 /// @param context The pointer given to SHWindow::create.
 /// @param id The id the control was added with.
-/// @param text The text field's new text, or NULL for other controls. Valid only during the call.
-/// @param value The new value of a check box (0 or 1), picker (option index) or slider; else 0.
+/// @param text The new text of a text field or editor, or NULL for other controls. Valid only
+/// during the call.
+/// @param value The new value of a check box (0 or 1), picker or tab view (index), list (index,
+/// -1 for none), slider or color control (0xRRGGBB00); else 0.
 typedef void (*SHEventHandler)(void *context, int32_t id, const char *text, int32_t value);
 
 /// The application object; create it before any window.
@@ -50,12 +53,14 @@ public:
 	/// that had them, found by id, and draws the new content.
 	void endContent();
 	/// Sets the text of a leaf view in place: a text's text, a button's title or a text field's
-	/// text. Does nothing if it already has that text, so a field's caret and selection stay.
-	/// @param index The view's position among the leaf views added since beginContent().
+	/// or editor's text. Does nothing if it already has that text, so a caret and selection stay.
+	/// @param index The view's position among the leaf views (every view an add call or
+	/// beginTabs() made) added since beginContent(); texts are named "text<index>".
 	void setViewText(int32_t index, const char *text);
 	/// Sets the value of a leaf view in place, as in the matching add call: a check box's state,
-	/// a picker's selection, a slider's value or a progress bar's thousandths. Does nothing if it
-	/// already has that value. @param index As for setViewText().
+	/// a picker's, list's or tab view's selection, a slider's value, a color or a progress bar's
+	/// thousandths. Does nothing if it already has that value, or for a negative tab selection.
+	/// @param index As for setViewText().
 	void setViewValue(int32_t index, int32_t value);
 	/// Starts a nested BGroupView. @param spacing Points between items; negative for the default.
 	void beginStack(bool vertical, float spacing);
@@ -63,6 +68,18 @@ public:
 	void endStack();
 	/// Starts a BBox with a title around a nested vertical BGroupView; end it with endStack().
 	void beginBox(const char *title);
+	/// Starts a vertical BGroupView scrolled vertically in a BScrollView; end it with
+	/// endStack(). Give it a height with setLastSize(), or it grows to fit its content.
+	void beginScroll();
+	/// Starts a BTabView, which counts as a leaf view; end it with endTabs(). Every tab view
+	/// stays constructed (the hidden ones are only hidden), so leaf indexes do not depend on
+	/// the selection. @param selection The tab to show; negative to keep the current one.
+	/// @param id Reported when the user picks a tab; negative to report nothing.
+	void beginTabs(int32_t selection, int32_t id);
+	/// Starts a tab of the innermost tab view: a vertical BGroupView; end it with endStack().
+	void beginTab(const char *title);
+	/// Ends the innermost tab view and shows its selected tab.
+	void endTabs();
 	/// Sets the insets of the current group. @param insets Points; negative for the default.
 	void setInsets(float insets);
 	void addText(const char *text);
@@ -80,6 +97,14 @@ public:
 		int32_t id);
 	/// Adds a horizontal BSlider named "slider<id>" with values from 0 to steps.
 	void addSlider(int32_t value, int32_t steps, int32_t id);
+	/// Adds a BTextView named "field<id>" in a BScrollView, reported like a text field.
+	void addTextEditor(const char *text, int32_t id);
+	/// Adds a BListView named "list<id>" in a BScrollView. @param items The item titles,
+	/// separated by newlines. @param selection The selected item; negative for none.
+	void addList(const char *items, int32_t selection, int32_t id);
+	/// Adds the title, if any, as a text that is not a leaf view, then a BColorControl named
+	/// "color<id>". @param rgb The color as 0xRRGGBB00.
+	void addColorPicker(const char *title, int32_t rgb, int32_t id);
 	/// Adds a BStatusBar. @param value Progress in thousandths.
 	void addProgress(const char *title, int32_t value);
 	/// Adds a BSeparatorView across the current group: a horizontal line in a vertical group.
@@ -93,11 +118,13 @@ private:
 	SHWindow(const char *title, SHEventHandler handler, void *context);
 	void MessageReceived(BMessage *message) override;
 	void addLeaf(BView *view);
+	BView *leafAt(int32 index) const;
 
 	SHEventHandler fHandler;
 	void *fContext;
 	BGroupView *fContent = nullptr;
 	std::vector<BGroupView *> fStack;
+	std::vector<BTabView *> fTabs;
 	std::vector<BView *> fViews; // the leaf views, in the order they were added
 	BString fFocusName;
 	int32 fSelectionStart = 0;

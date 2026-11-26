@@ -2,6 +2,13 @@
 enum LayoutCommand: Equatable {
     case beginStack(vertical: Bool, spacing: Float?)
     case beginBox(String)
+    case beginScroll
+    /// - Parameters:
+    ///   - selection: The tab to show; -1 to leave it to the user.
+    ///   - id: The action's id; -1 when the selection is not bound.
+    case beginTabs(selection: Int, id: Int)
+    case beginTab(String)
+    case endTabs
     case endStack
     case insets(Float?)
     case text(String)
@@ -13,6 +20,11 @@ enum LayoutCommand: Equatable {
     case slider(value: Int, steps: Int, id: Int)
     /// - Parameter value: Thousandths of the total.
     case progress(String, value: Int)
+    case textEditor(text: String, id: Int)
+    /// - Parameter selection: The selected item; -1 for none.
+    case list(items: [String], selection: Int, id: Int)
+    /// - Parameter rgb: The color as 0xRRGGBB00, in an Int32's bit pattern.
+    case colorPicker(String, rgb: Int, id: Int)
     case divider
     case spacer
     case size(width: Float?, height: Float?)
@@ -30,7 +42,12 @@ enum LayoutCommand: Equatable {
             .picker(title, options: options, selection: 0, radio: radio, id: id)
         case .slider(_, let steps, let id): .slider(value: 0, steps: steps, id: id)
         case .progress(let title, _): .progress(title, value: 0)
-        case .beginStack, .beginBox, .endStack, .insets, .divider, .spacer, .size: self
+        case .textEditor(_, let id): .textEditor(text: "", id: id)
+        case .list(let items, _, let id): .list(items: items, selection: 0, id: id)
+        case .colorPicker(let title, _, let id): .colorPicker(title, rgb: 0, id: id)
+        case .beginTabs(_, let id): .beginTabs(selection: 0, id: id)
+        case .beginStack, .beginBox, .beginScroll, .beginTab, .endTabs, .endStack, .insets, .divider,
+             .spacer, .size: self
         }
     }
 
@@ -47,8 +64,9 @@ final class Renderer {
     var commands: [LayoutCommand] = []
     private(set) var actions: [Action] = []
 
-    /// What a control does when it changes: gets a text field's new text, or the new value of a
-    /// toggle (0 or 1), picker (option index) or slider (from 0 to its steps).
+    /// What a control does when it changes: gets a text field's or editor's new text, or the new
+    /// value of a toggle (0 or 1), picker or tab view (index), list (index, -1 for none), slider
+    /// (from 0 to its steps) or color picker (0xRRGGBB00 in an Int32's bit pattern).
     typealias Action = (_ text: String, _ value: Int) -> Void
 
     /// Registers a control's action. - Returns: The control's id.

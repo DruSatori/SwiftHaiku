@@ -103,6 +103,10 @@ final class WindowHost {
             switch command {
             case .beginStack(let vertical, let spacing): window.beginStack(vertical, spacing ?? -1)
             case .beginBox(let title): window.beginBox(title)
+            case .beginScroll: window.beginScroll()
+            case .beginTabs(let selection, let id): window.beginTabs(Int32(selection), Int32(id))
+            case .beginTab(let title): window.beginTab(title)
+            case .endTabs: window.endTabs()
             case .endStack: window.endStack()
             case .insets(let insets): window.setInsets(insets ?? -1)
             case .text(let text): window.addText(text)
@@ -114,6 +118,10 @@ final class WindowHost {
                 window.addPicker(title, options.joined(separator: "\n"), Int32(selection), radio, Int32(id))
             case .slider(let value, let steps, let id): window.addSlider(Int32(value), Int32(steps), Int32(id))
             case .progress(let title, let value): window.addProgress(title, Int32(value))
+            case .textEditor(let text, let id): window.addTextEditor(text, Int32(id))
+            case .list(let items, let selection, let id):
+                window.addList(items.joined(separator: "\n"), Int32(selection), Int32(id))
+            case .colorPicker(let title, let rgb, let id): window.addColorPicker(title, Int32(rgb), Int32(id))
             case .divider: window.addDivider()
             case .spacer: window.addSpacer()
             case .size(let width, let height): window.setLastSize(width ?? -1, height ?? -1)
@@ -127,15 +135,17 @@ final class WindowHost {
         var index: Int32 = 0 // position among the leaf views, as SHWindow::setViewText counts
         for command in commands {
             switch command {
-            case .text(let text), .button(let text, _), .textField(_, let text, _, _):
+            case .text(let text), .button(let text, _), .textField(_, let text, _, _), .textEditor(let text, _):
                 window.setViewText(index, text)
             case .toggle(let title, let isOn, _):
                 window.setViewText(index, title)
                 window.setViewValue(index, isOn ? 1 : 0)
-            case .picker(_, _, let value, _, _), .slider(let value, _, _), .progress(_, let value):
+            case .picker(_, _, let value, _, _), .slider(let value, _, _), .progress(_, let value),
+                 .list(_, let value, _), .colorPicker(_, let value, _), .beginTabs(let value, _):
                 window.setViewValue(index, Int32(value))
             case .divider: break
-            case .beginStack, .beginBox, .endStack, .insets, .spacer, .size: continue // no leaf view
+            case .beginStack, .beginBox, .beginScroll, .beginTab, .endTabs, .endStack, .insets, .spacer, .size:
+                continue // no leaf view
             }
             index += 1
         }
